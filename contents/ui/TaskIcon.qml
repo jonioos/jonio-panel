@@ -23,7 +23,8 @@ Item {
     readonly property bool running: runningIndex >= 0
     readonly property bool active: running && taskbar.isTaskActive(runningIndex)
     readonly property int extent: taskbar.iconSlot
-    readonly property int openCount: running ? taskbar.windowCount(runningIndex) : 0
+    readonly property int openCount: running
+        ? taskbar.windowCount(runningIndex, taskbar.taskRevision) : 0
     readonly property var player: taskbar.mediaModel.playerForLauncherUrl(
         taskData.LauncherUrlWithoutIcon, taskData.AppPid || 0)
     property var generatedMenuItems: []
@@ -34,11 +35,14 @@ Item {
     property bool pinDragHoldReady: false
     property bool suppressNextClick: false
     property point pinDragStart: Qt.point(0, 0)
-    property point pendingMenuPoint: Qt.point(0, 0)
 
     visible: shown
     width: shown ? extent : 0
     height: taskbar.height
+    onXChanged: if (taskbar) taskbar.scheduleGeometryPublish()
+    onYChanged: if (taskbar) taskbar.scheduleGeometryPublish()
+    onVisibleChanged: if (taskbar) taskbar.scheduleGeometryPublish()
+    onWidthChanged: if (taskbar) taskbar.scheduleGeometryPublish()
     z: draggingPinned ? 20 : 0
     transform: Translate {
         x: !button.pinned ? 0 : button.draggingPinned
@@ -206,7 +210,7 @@ Item {
                 return
             }
             if (mouse.button === Qt.RightButton) {
-                button.showContextMenu(mouse.x, mouse.y)
+                button.showContextMenu()
             } else if (mouse.button === Qt.MiddleButton) {
                 if (button.running) {
                     button.sourceModel.requestClose(button.sourceModel.makeModelIndex(button.runningIndex))
@@ -237,18 +241,17 @@ Item {
     Timer {
         id: contextOpenTimer
         interval: 100
-        onTriggered: button.openTaskMenu(button.pendingMenuPoint.x, button.pendingMenuPoint.y)
+        onTriggered: button.openTaskMenu()
     }
 
-    function showContextMenu(x, y) {
+    function showContextMenu() {
         hoverPreviewTimer.stop()
         taskbar.dismissPreview()
         menuOpen = true
-        pendingMenuPoint = Qt.point(x, y)
         contextOpenTimer.restart()
     }
 
-    function openTaskMenu(x, y) {
+    function openTaskMenu() {
         for (const item of generatedMenuItems) item.destroy()
         generatedMenuItems = []
         const url = taskData.LauncherUrlWithoutIcon
@@ -262,7 +265,7 @@ Item {
                 generatedMenuItems.push(item)
             }
         }
-        taskMenu.open(x, y)
+        taskMenu.openRelative()
     }
 
     Component {
@@ -272,7 +275,8 @@ Item {
 
     PlasmaExtras.Menu {
         id: taskMenu
-        visualParent: pointer
+        visualParent: button
+        minimumWidth: button.width
         placement: {
             const edge = button.taskbar.plasmoid.location
             if (edge === PlasmaCore.Types.TopEdge) return PlasmaExtras.Menu.BottomPosedLeftAlignedPopup

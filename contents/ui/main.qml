@@ -35,6 +35,7 @@ PlasmoidItem {
         + divider.width + runningVisibleSlots * (iconSlot + itemGap) + 3 * barRow.spacing
     readonly property int menuColumns: pinnedVisibleSlots
     property int activeStack: 0
+    property int taskRevision: 0
     property int pendingStack: 0
     property int stackDirection: 1
     property double lastStackWheelAt: 0
@@ -56,6 +57,55 @@ PlasmoidItem {
     Component.onCompleted: {
         loadStackAssignments()
         pinnedOrder = Array.from(Plasmoid.configuration.launchers)
+        scheduleGeometryPublish()
+    }
+    onTaskRevisionChanged: scheduleGeometryPublish()
+    onActiveStackChanged: scheduleGeometryPublish()
+    onXChanged: scheduleGeometryPublish()
+    onYChanged: scheduleGeometryPublish()
+    onWidthChanged: scheduleGeometryPublish()
+    onHeightChanged: scheduleGeometryPublish()
+
+    Timer {
+        id: iconGeometryTimer
+        interval: 100
+        onTriggered: bar.publishIconGeometries()
+    }
+
+    function scheduleGeometryPublish() {
+        iconGeometryTimer.restart()
+    }
+
+    function publishIconGeometries() {
+        for (let row = 0; row < tasksModel.count; ++row) {
+            const index = tasksModel.makeModelIndex(row)
+            if (!tasksModel.data(index, TaskManager.AbstractTasksModel.IsWindow)
+                && !tasksModel.data(index, TaskManager.AbstractTasksModel.IsGroupParent)) continue
+
+            const url = tasksModel.data(index, TaskManager.AbstractTasksModel.LauncherUrlWithoutIcon)
+            let target = null
+            if (isPinned(url)) {
+                const launcher = tasksModel.launcherPosition(url)
+                for (let i = 0; i < pinnedRepeater.count; ++i) {
+                    const item = pinnedRepeater.itemAt(i)
+                    if (item && item.shown
+                        && tasksModel.launcherPosition(item.taskData.LauncherUrlWithoutIcon) === launcher) {
+                        target = item
+                        break
+                    }
+                }
+                if (!target || target.x + target.width < pinnedFlick.contentX
+                    || target.x > pinnedFlick.contentX + pinnedFlick.width)
+                    target = menuButton
+            } else {
+                target = runningRepeater.itemAt(row)
+                if (!target || !target.shown
+                    || target.x + target.width < runningFlick.contentX
+                    || target.x > runningFlick.contentX + runningFlick.width)
+                    target = divider
+            }
+            tasksModel.requestPublishDelegateGeometry(index, taskBackend.globalRect(target), target)
+        }
     }
 
     Connections {
@@ -133,6 +183,7 @@ PlasmoidItem {
 
     SequentialAnimation {
         id: stackSwitch
+        onStopped: bar.scheduleGeometryPublish()
         ParallelAnimation {
             NumberAnimation { target: pinnedRow; property: "x"; from: 0; to: -bar.stackDirection * 18; duration: 110 }
             NumberAnimation { target: pinnedRow; property: "opacity"; from: 1; to: 0; duration: 110 }
@@ -284,6 +335,7 @@ PlasmoidItem {
 
     function activateTask(row) {
         const idx = tasksModel.makeModelIndex(row)
+        publishIconGeometries()
         if (tasksModel.data(idx, TaskManager.AbstractTasksModel.IsGroupParent)) {
             openPreview(previewAnchor, row)
             return
@@ -342,7 +394,7 @@ PlasmoidItem {
         return true
     }
 
-    function windowCount(row) {
+    function windowCount(row, revision) {
         if (row < 0) return 0
         const idx = tasksModel.makeModelIndex(row)
         return tasksModel.data(idx, TaskManager.AbstractTasksModel.IsGroupParent)
@@ -385,6 +437,7 @@ PlasmoidItem {
     function activatePreviewEntry(entry) {
         const idx = entry.child >= 0 ? tasksModel.makeModelIndex(entry.row, entry.child)
             : tasksModel.makeModelIndex(entry.row)
+        publishIconGeometries()
         tasksModel.requestActivate(idx)
         taskBackend.cancelHighlightWindows()
         previewDialog.visible = false
@@ -441,6 +494,12 @@ PlasmoidItem {
     Connections {
         target: tasksModel
         ignoreUnknownSignals: true
+        function onRowsInserted() { bar.taskRevision++ }
+        function onRowsRemoved() { bar.taskRevision++ }
+        function onRowsMoved() { bar.taskRevision++ }
+        function onDataChanged() { bar.taskRevision++ }
+        function onModelReset() { bar.taskRevision++ }
+        function onCountChanged() { bar.taskRevision++ }
         function onRowsAboutToBeRemoved(parent, first, last) {
             if (parent && parent.valid) return
             for (let row = first; row <= last; ++row) {
@@ -544,6 +603,7 @@ PlasmoidItem {
 
         Flickable {
             id: pinnedFlick
+            onContentXChanged: bar.scheduleGeometryPublish()
             width: bar.pinnedVisibleSlots * (bar.iconSlot + bar.itemGap)
             height: parent.height
             contentWidth: pinnedRow.width
@@ -602,6 +662,7 @@ PlasmoidItem {
 
         Flickable {
             id: runningFlick
+            onContentXChanged: bar.scheduleGeometryPublish()
             width: Math.max(0, bar.width - menuButton.width - pinnedFlick.width
                 - divider.width - 3 * barRow.spacing)
             height: parent.height
