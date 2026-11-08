@@ -29,6 +29,8 @@ KCMUtils.SimpleKCM {
     property var cfg_indicatorColorDefault
     property alias cfg_showPreviews: showPreviews.checked
     property var cfg_showPreviewsDefault
+    property alias cfg_previewDelay: previewDelay.value
+    property var cfg_previewDelayDefault
     property alias cfg_closeMenuOnTaskHover: closeMenuOnTaskHover.checked
     property var cfg_closeMenuOnTaskHoverDefault
     property alias cfg_scopeScreens: scopeScreens.currentIndex
@@ -88,7 +90,7 @@ KCMUtils.SimpleKCM {
         QQC2.Label {
             Layout.fillWidth: true
             wrapMode: Text.WordWrap
-            text: "Usa la rotella sopra le app fissate per passare da uno stack all'altro. Il pulsante + nel menu aggiunge l'app allo stack mostrato. Con un solo stack, la rotella scorre le icone come prima."
+            text: "Trascina le app fissate col tasto sinistro per riordinarle nello stack corrente. Usa la rotella verso l'alto o il basso sopra le app fissate per passare da uno stack all'altro. Il pulsante + nel menu aggiunge l'app allo stack mostrato. Con un solo stack, la rotella scorre le icone."
         }
         QQC2.ComboBox {
             id: indicatorStyle
@@ -125,6 +127,17 @@ KCMUtils.SimpleKCM {
             id: showPreviews
             Kirigami.FormData.label: "Anteprime:"
             text: "Mostra anteprime al passaggio del mouse"
+        }
+        QQC2.SpinBox {
+            id: previewDelay
+            Kirigami.FormData.label: "Ritardo anteprima:"
+            enabled: showPreviews.checked
+            from: 100
+            to: 2000
+            stepSize: 50
+            editable: true
+            textFromValue: value => value + " ms"
+            valueFromText: text => parseInt(text, 10)
         }
         QQC2.CheckBox {
             id: closeMenuOnTaskHover

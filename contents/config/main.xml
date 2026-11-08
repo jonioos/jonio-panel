@@ -18,6 +18,7 @@
     <entry name="overrideIndicatorColor" type="Bool"><default>false</default></entry>
     <entry name="indicatorColor" type="Color"><default>#4f80ff</default></entry>
     <entry name="showPreviews" type="Bool"><default>true</default></entry>
+    <entry name="previewDelay" type="Int"><default>270</default><min>100</min><max>2000</max></entry>
     <entry name="closeMenuOnTaskHover" type="Bool"><default>true</default></entry>
     <entry name="scopeScreens" type="Int"><default>0</default></entry>
     <entry name="scopeDesktops" type="Int"><default>0</default></entry>

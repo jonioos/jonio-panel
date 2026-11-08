@@ -35,6 +35,17 @@ PlasmoidItem {
         + divider.width + runningVisibleSlots * (iconSlot + itemGap) + 3 * barRow.spacing
     readonly property int menuColumns: pinnedVisibleSlots
     property int activeStack: 0
+    property int pendingStack: 0
+    property int stackDirection: 1
+    property double lastStackWheelAt: 0
+    property var pinnedOrder: Array.from(Plasmoid.configuration.launchers)
+    property bool pinnedPressActive: false
+    property int pinnedDropIndex: -1
+    property var pinnedDragKeys: []
+    property string pinnedDragSource: ""
+    property int pinnedDragSourceIndex: -1
+    property real pinnedDragOriginX: 0
+    property real pinnedDragOffset: 0
     property var stackMap: ({})
     property var previewEntries: []
     property Item previewAnchor: null
@@ -44,6 +55,7 @@ PlasmoidItem {
 
     Component.onCompleted: {
         loadStackAssignments()
+        pinnedOrder = Array.from(Plasmoid.configuration.launchers)
     }
 
     Connections {
@@ -76,10 +88,160 @@ PlasmoidItem {
         return Math.max(0, Math.min(Plasmoid.configuration.stackCount - 1, stored))
     }
 
+    function syncPinnedOrder() {
+        const available = Array.from(tasksModel.launcherList).map(item => String(item))
+        const ordered = pinnedOrder.filter(item => available.includes(item))
+        for (const item of available) {
+            if (!ordered.includes(item)) ordered.push(item)
+        }
+        pinnedOrder = ordered
+        Plasmoid.configuration.launchers = ordered
+    }
+
+    function pinnedStackOrder() {
+        return pinnedOrder.filter(item => stackFor(item) === activeStack)
+    }
+
+    function pinnedVisualIndex(url) {
+        const key = launcherKey(url)
+        return pinnedStackOrder().findIndex(item => launcherKey(item) === key)
+    }
+
     function showStack(index) {
         const count = Math.max(1, Plasmoid.configuration.stackCount)
         activeStack = (index + count) % count
         pinnedFlick.contentX = 0
+    }
+
+    function wheelPinned(delta) {
+        if (!delta) return
+        if (Plasmoid.configuration.stackCount > 1) {
+            const now = Date.now()
+            if (now - lastStackWheelAt < 260 || stackSwitch.running) return
+            lastStackWheelAt = now
+            dismissPreview()
+            stackDirection = delta < 0 ? 1 : -1
+            pendingStack = (activeStack + stackDirection
+                + Plasmoid.configuration.stackCount) % Plasmoid.configuration.stackCount
+            stackSwitch.start()
+        } else {
+            pinnedFlick.contentX = Math.max(0,
+                Math.min(pinnedFlick.contentWidth - pinnedFlick.width,
+                    pinnedFlick.contentX - delta / 3))
+        }
+    }
+
+    SequentialAnimation {
+        id: stackSwitch
+        ParallelAnimation {
+            NumberAnimation { target: pinnedRow; property: "x"; from: 0; to: -bar.stackDirection * 18; duration: 110 }
+            NumberAnimation { target: pinnedRow; property: "opacity"; from: 1; to: 0; duration: 110 }
+        }
+        ScriptAction {
+            script: {
+                bar.showStack(bar.pendingStack)
+                pinnedRow.x = bar.stackDirection * 18
+            }
+        }
+        ParallelAnimation {
+            NumberAnimation { target: pinnedRow; property: "x"; to: 0; duration: 170; easing.type: Easing.OutCubic }
+            NumberAnimation { target: pinnedRow; property: "opacity"; to: 1; duration: 170 }
+        }
+    }
+
+    function visiblePinnedItems() {
+        const items = []
+        for (let i = 0; i < pinnedRepeater.count; ++i) {
+            const item = pinnedRepeater.itemAt(i)
+            if (item && item.shown) items.push(item)
+        }
+        items.sort((a, b) => a.x - b.x)
+        return items
+    }
+
+    function pinnedIndexAt(pointer, x, y) {
+        const cursorX = pinnedRow.mapFromItem(pointer, x, y).x
+        const items = visiblePinnedItems()
+        if (!items.length) return -1
+        let nearest = 0
+        let distance = Infinity
+        for (let i = 0; i < items.length; ++i) {
+            const delta = Math.abs(cursorX - (items[i].x + items[i].width / 2))
+            if (delta < distance) {
+                distance = delta
+                nearest = i
+            }
+        }
+        return nearest
+    }
+
+    function pinnedShift(url) {
+        if (!pinnedDragSource || launcherKey(url) === pinnedDragSource) return 0
+        const index = pinnedDragKeys.indexOf(launcherKey(url))
+        if (pinnedDragSourceIndex < pinnedDropIndex
+            && index > pinnedDragSourceIndex && index <= pinnedDropIndex)
+            return -(iconSlot + itemGap)
+        if (pinnedDragSourceIndex > pinnedDropIndex
+            && index >= pinnedDropIndex && index < pinnedDragSourceIndex)
+            return iconSlot + itemGap
+        return 0
+    }
+
+    function setPanelDragInhibited(inhibited) {
+        let item = bar
+        while (item) {
+            if (item.appletRequestsInhibitDnD !== undefined)
+                item.appletRequestsInhibitDnD = inhibited
+            item = item.parent
+        }
+    }
+
+    function beginPinnedDrag(url, pointer, x, y) {
+        pinnedDragKeys = visiblePinnedItems().map(item =>
+            launcherKey(item.taskData.LauncherUrlWithoutIcon))
+        pinnedDragSource = launcherKey(url)
+        pinnedDragSourceIndex = pinnedDragKeys.indexOf(pinnedDragSource)
+        pinnedDragOriginX = pinnedRow.mapFromItem(pointer, x, y).x
+        pinnedDragOffset = 0
+        pinnedDropIndex = pinnedDragSourceIndex
+    }
+
+    function updatePinnedDrop(pointer, x, y) {
+        const cursorX = pinnedRow.mapFromItem(pointer, x, y).x
+        pinnedDragOffset = cursorX - pinnedDragOriginX
+        pinnedDropIndex = pinnedIndexAt(pointer, x, y)
+    }
+
+    function endPinnedDrag() {
+        pinnedDragSource = ""
+        pinnedDragSourceIndex = -1
+        pinnedDropIndex = -1
+        pinnedDragKeys = []
+        pinnedDragOffset = 0
+        setPanelDragInhibited(false)
+    }
+
+    function movePinnedLauncher(url, targetKey) {
+        if (!url) return
+        const fullOrder = Array.from(pinnedOrder)
+        const key = launcherKey(url)
+        const sourceUrl = fullOrder.find(item => launcherKey(item) === key)
+        if (!sourceUrl) return
+
+        const stackOrder = fullOrder.filter(item => stackFor(item) === activeStack)
+        if (stackOrder.length < 2) return
+        const sourceIndex = stackOrder.indexOf(sourceUrl)
+        const targetIndex = stackOrder.findIndex(item => launcherKey(item) === targetKey)
+        if (sourceIndex < 0 || sourceIndex === targetIndex) return
+        if (targetIndex < 0) return
+
+        stackOrder.splice(sourceIndex, 1)
+        stackOrder.splice(targetIndex, 0, sourceUrl)
+        let stackIndex = 0
+        const reordered = fullOrder.map(item => stackFor(item) === activeStack
+            ? stackOrder[stackIndex++] : item)
+        pinnedOrder = reordered
+        Plasmoid.configuration.launchers = reordered
     }
 
     function visibleRunningCount() {
@@ -193,7 +355,7 @@ PlasmoidItem {
     }
 
     function openPreview(anchor, row) {
-        if (!anchor || row < 0) return
+        if (!anchor || row < 0 || pinnedPressActive) return
         taskBackend.cancelHighlightWindows()
         previewAnchor = anchor
         previewRow = row
@@ -245,11 +407,50 @@ PlasmoidItem {
         filterByActivity: Plasmoid.configuration.scopeActivities === 1
 
         onLauncherListChanged: {
-            if (launchersReady) Plasmoid.configuration.launchers = launcherList
+            if (launchersReady) bar.syncPinnedOrder()
         }
         Component.onCompleted: {
             launcherList = Plasmoid.configuration.launchers
             launchersReady = true
+        }
+    }
+
+    Component {
+        id: closingIconComponent
+        Item {
+            id: closingIcon
+            property var iconSource
+            width: bar.iconSlot
+            height: bar.height
+            z: 100
+            Kirigami.Icon {
+                anchors.centerIn: parent
+                width: Math.min(Plasmoid.configuration.iconSize, parent.height - 10)
+                height: width
+                source: closingIcon.iconSource
+            }
+            ParallelAnimation {
+                running: true
+                NumberAnimation { target: closingIcon; property: "opacity"; to: 0; duration: 190 }
+                NumberAnimation { target: closingIcon; property: "scale"; to: 0.6; duration: 190; easing.type: Easing.InCubic }
+                onStopped: closingIcon.destroy()
+            }
+        }
+    }
+
+    Connections {
+        target: tasksModel
+        ignoreUnknownSignals: true
+        function onRowsAboutToBeRemoved(parent, first, last) {
+            if (parent && parent.valid) return
+            for (let row = first; row <= last; ++row) {
+                const item = runningRepeater.itemAt(row)
+                if (!item || !item.shown) continue
+                const point = item.mapToItem(bar, 0, 0)
+                closingIconComponent.createObject(bar, {
+                    x: point.x, y: point.y, iconSource: item.taskData.decoration
+                })
+            }
         }
     }
 
@@ -316,7 +517,7 @@ PlasmoidItem {
                 rotation: appDialog.visible ? 180 : 0
             }
             PlasmaComponents3.Label {
-                visible: Plasmoid.configuration.stackCount > 1
+                visible: Plasmoid.configuration.stackCount > 2
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: 1
@@ -350,12 +551,26 @@ PlasmoidItem {
             clip: true
             boundsBehavior: Flickable.StopAtBounds
             flickableDirection: Flickable.HorizontalFlick
+            interactive: false
 
-            Row {
+            MouseArea {
+                x: pinnedFlick.contentX
+                width: pinnedFlick.width
+                height: pinnedFlick.height
+                acceptedButtons: Qt.NoButton
+                onWheel: wheel => {
+                    bar.wheelPinned(wheel.angleDelta.y || wheel.angleDelta.x
+                        || wheel.pixelDelta.y || wheel.pixelDelta.x)
+                    wheel.accepted = true
+                }
+            }
+
+            Item {
                 id: pinnedRow
+                width: bar.pinnedStackOrder().length * (bar.iconSlot + bar.itemGap)
                 height: parent.height
-                spacing: bar.itemGap
                 Repeater {
+                    id: pinnedRepeater
                     model: tasksModel
                     delegate: TaskIcon {
                         required property var model
@@ -363,22 +578,14 @@ PlasmoidItem {
                         taskData: model
                         taskIndex: index
                         pinned: true
+                        x: bar.pinnedVisualIndex(model.LauncherUrlWithoutIcon)
+                            * (bar.iconSlot + bar.itemGap)
+                        Behavior on x {
+                            NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
+                        }
                         taskbar: bar
                         sourceModel: tasksModel
                     }
-                }
-            }
-            WheelHandler {
-                target: null
-                onWheel: event => {
-                    const delta = event.angleDelta.y || event.angleDelta.x
-                    if (Plasmoid.configuration.stackCount > 1) {
-                        bar.showStack(bar.activeStack + (delta < 0 ? 1 : -1))
-                    } else {
-                        pinnedFlick.contentX = Math.max(0, Math.min(pinnedFlick.contentWidth - pinnedFlick.width,
-                            pinnedFlick.contentX - delta / 3))
-                    }
-                    event.accepted = true
                 }
             }
         }
@@ -408,7 +615,14 @@ PlasmoidItem {
                 id: runningRow
                 height: parent.height
                 spacing: bar.itemGap
+                add: Transition {
+                    NumberAnimation { properties: "opacity,scale"; from: 0; to: 1; duration: 170; easing.type: Easing.OutCubic }
+                }
+                move: Transition {
+                    NumberAnimation { properties: "x"; duration: 180; easing.type: Easing.OutCubic }
+                }
                 Repeater {
+                    id: runningRepeater
                     model: tasksModel
                     delegate: TaskIcon {
                         required property var model

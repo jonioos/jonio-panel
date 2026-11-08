@@ -28,11 +28,27 @@ Item {
         taskData.LauncherUrlWithoutIcon, taskData.AppPid || 0)
     property var generatedMenuItems: []
     property bool menuOpen: false
+    property bool draggingPinned: false
+    property bool pinDragPending: false
+    property bool pinDragActive: false
+    property bool pinDragHoldReady: false
+    property bool suppressNextClick: false
+    property point pinDragStart: Qt.point(0, 0)
     property point pendingMenuPoint: Qt.point(0, 0)
 
     visible: shown
     width: shown ? extent : 0
     height: taskbar.height
+    z: draggingPinned ? 20 : 0
+    transform: Translate {
+        x: !button.pinned ? 0 : button.draggingPinned
+            ? button.taskbar.pinnedDragOffset
+            : button.taskbar.pinnedShift(button.taskData.LauncherUrlWithoutIcon)
+        Behavior on x {
+            enabled: !button.draggingPinned
+            NumberAnimation { duration: 160; easing.type: Easing.OutCubic }
+        }
+    }
 
     Rectangle {
         anchors.centerIn: parent
@@ -40,7 +56,9 @@ Item {
         height: width
         radius: 4
         color: pointer.containsMouse || button.active ? Kirigami.Theme.highlightColor : "transparent"
-        opacity: button.active ? 0.24 : 0.14
+        opacity: button.draggingPinned ? 0.36 : (button.active ? 0.24 : 0.14)
+        scale: button.draggingPinned ? 1.12 : 1
+        Behavior on scale { NumberAnimation { duration: 100 } }
     }
 
     Kirigami.Icon {
@@ -51,7 +69,9 @@ Item {
     }
 
     Row {
-        visible: button.running
+        visible: button.running || opacity > 0
+        opacity: button.running ? 1 : 0
+        Behavior on opacity { NumberAnimation { duration: 170 } }
         anchors.horizontalCenter: parent.horizontalCenter
         anchors.bottom: parent.bottom
         anchors.bottomMargin: 2
@@ -84,12 +104,95 @@ Item {
         id: pointer
         anchors.fill: parent
         hoverEnabled: true
+        preventStealing: button.pinned
+        cursorShape: button.pinDragHoldReady || button.pinDragActive
+            ? Qt.SizeAllCursor : Qt.ArrowCursor
         acceptedButtons: Qt.LeftButton | Qt.RightButton | Qt.MiddleButton
 
+        onWheel: wheel => {
+            if (button.pinned) {
+                button.taskbar.wheelPinned(wheel.angleDelta.y || wheel.angleDelta.x
+                    || wheel.pixelDelta.y || wheel.pixelDelta.x)
+                wheel.accepted = true
+            } else {
+                wheel.accepted = false
+            }
+        }
+
+        onPressed: mouse => {
+            if (mouse.button === Qt.LeftButton && button.pinned && button.shown) {
+                button.taskbar.pinnedPressActive = true
+                hoverPreviewTimer.stop()
+                button.taskbar.dismissPreview()
+                button.pinDragStart = Qt.point(mouse.x, mouse.y)
+                button.pinDragPending = true
+                button.pinDragActive = false
+                button.pinDragHoldReady = false
+                button.suppressNextClick = false
+                button.taskbar.setPanelDragInhibited(true)
+                pinCursorDelay.restart()
+            }
+        }
+        onPositionChanged: mouse => {
+            if (!button.pinDragPending || !(mouse.buttons & Qt.LeftButton)) return
+            const dx = mouse.x - button.pinDragStart.x
+            const dy = mouse.y - button.pinDragStart.y
+            const threshold = 6
+            if (!button.pinDragActive && Math.sqrt(dx * dx + dy * dy) >= threshold) {
+                button.pinDragActive = true
+                button.pinDragHoldReady = true
+                pinCursorDelay.stop()
+                button.draggingPinned = true
+                hoverPreviewTimer.stop()
+                button.taskbar.dismissPreview()
+                button.taskbar.beginPinnedDrag(button.taskData.LauncherUrlWithoutIcon,
+                    pointer, button.pinDragStart.x, button.pinDragStart.y)
+            }
+            if (button.pinDragActive)
+                button.taskbar.updatePinnedDrop(pointer, mouse.x, mouse.y)
+        }
+        onReleased: mouse => {
+            pinCursorDelay.stop()
+            let targetIndex = -1
+            let targetKey = ""
+            let sourceUrl = ""
+            if (button.pinDragActive) {
+                button.taskbar.updatePinnedDrop(pointer, mouse.x, mouse.y)
+                targetIndex = button.taskbar.pinnedDropIndex
+                targetKey = button.taskbar.pinnedDragKeys[targetIndex] || ""
+                sourceUrl = button.taskData.LauncherUrlWithoutIcon
+                button.suppressNextClick = true
+            } else if (button.pinDragHoldReady) {
+                button.suppressNextClick = true
+            }
+            if (targetKey)
+                button.taskbar.movePinnedLauncher(sourceUrl, targetKey)
+            button.pinDragPending = false
+            button.pinDragActive = false
+            button.pinDragHoldReady = false
+            button.draggingPinned = false
+            button.taskbar.pinnedPressActive = false
+            button.taskbar.endPinnedDrag()
+        }
+        onCanceled: {
+            pinCursorDelay.stop()
+            const targetIndex = button.pinDragActive ? button.taskbar.pinnedDropIndex : -1
+            const targetKey = button.taskbar.pinnedDragKeys[targetIndex] || ""
+            const sourceUrl = button.taskData.LauncherUrlWithoutIcon
+            if (targetKey)
+                button.taskbar.movePinnedLauncher(sourceUrl, targetKey)
+            button.taskbar.endPinnedDrag()
+            button.pinDragPending = false
+            button.pinDragActive = false
+            button.pinDragHoldReady = false
+            button.draggingPinned = false
+            button.taskbar.pinnedPressActive = false
+        }
         onEntered: {
             button.taskbar.previewCloseControl.stop()
             if (!button.taskbar.allowTaskHover()) return
-            if (!button.menuOpen && button.running && button.taskbar.plasmoid.configuration.showPreviews)
+            if (!button.taskbar.pinnedPressActive && !button.menuOpen && button.running
+                && button.taskbar.plasmoid.configuration.showPreviews)
                 hoverPreviewTimer.restart()
         }
         onExited: {
@@ -98,6 +201,10 @@ Item {
         }
 
         onClicked: mouse => {
+            if (button.suppressNextClick) {
+                button.suppressNextClick = false
+                return
+            }
             if (mouse.button === Qt.RightButton) {
                 button.showContextMenu(mouse.x, mouse.y)
             } else if (mouse.button === Qt.MiddleButton) {
@@ -115,9 +222,16 @@ Item {
     }
 
     Timer {
+        id: pinCursorDelay
+        interval: 300
+        onTriggered: if (button.pinDragPending) button.pinDragHoldReady = true
+    }
+
+    Timer {
         id: hoverPreviewTimer
-        interval: 270
-        onTriggered: button.taskbar.openPreview(button, button.runningIndex)
+        interval: button.taskbar.plasmoid.configuration.previewDelay
+        onTriggered: if (!button.pinDragPending && !button.draggingPinned)
+            button.taskbar.openPreview(button, button.runningIndex)
     }
 
     Timer {
