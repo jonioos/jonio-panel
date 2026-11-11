@@ -34,6 +34,11 @@ PlasmoidItem {
     readonly property int compactWidth: menuButton.width + pinnedVisibleSlots * (iconSlot + itemGap)
         + divider.width + runningVisibleSlots * (iconSlot + itemGap) + 3 * barRow.spacing
     readonly property int menuColumns: pinnedVisibleSlots
+    readonly property int previewCellWidth: 196
+    readonly property int previewCellHeight: 139
+    readonly property int previewInset: 4
+    readonly property int previewColumns: Math.max(1, Math.min(4, previewEntries.length,
+        Math.floor((Screen.width * 0.8 - 2 * previewInset) / previewCellWidth)))
     property int activeStack: 0
     property int taskRevision: 0
     property int pendingStack: 0
@@ -49,9 +54,17 @@ PlasmoidItem {
     property real pinnedDragOffset: 0
     property var stackMap: ({})
     property var previewEntries: []
+    property var pendingPreviewEntries: []
+    property var previewReadyIndices: []
+    property bool previewSnapshotActive: false
     property Item previewAnchor: null
     property int previewRow: -1
+    property int pendingPreviewRow: -1
+    property Item pendingPreviewAnchor: null
+    property string previewSourceUrl: ""
+    property var previewClosingIds: []
     property bool previewReady: false
+    readonly property bool previewDialogVisible: previewDialog.visible
     property alias previewCloseControl: previewCloseTimer
 
     Component.onCompleted: {
@@ -59,7 +72,10 @@ PlasmoidItem {
         pinnedOrder = Array.from(Plasmoid.configuration.launchers)
         scheduleGeometryPublish()
     }
-    onTaskRevisionChanged: scheduleGeometryPublish()
+    onTaskRevisionChanged: {
+        scheduleGeometryPublish()
+        if (previewDialog.visible && !previewSnapshotActive) previewRefreshTimer.restart()
+    }
     onActiveStackChanged: scheduleGeometryPublish()
     onXChanged: scheduleGeometryPublish()
     onYChanged: scheduleGeometryPublish()
@@ -380,10 +396,18 @@ PlasmoidItem {
     }
 
     function dismissPreview() {
+        previewCaptureTimer.stop()
+        previewWaitTimer.stop()
+        previewReveal.stop()
+        previewRefreshTimer.stop()
         previewLoadTimer.stop()
         previewCloseTimer.stop()
         previewDialog.visible = false
         previewReady = false
+        previewGrid.opacity = 1
+        previewSnapshotActive = false
+        previewSnapshot.visible = false
+        previewClosingIds = []
         taskBackend.cancelHighlightWindows()
     }
 
@@ -406,11 +430,7 @@ PlasmoidItem {
         tasksModel.requestClose(tasksModel.makeModelIndex(row))
     }
 
-    function openPreview(anchor, row) {
-        if (!anchor || row < 0 || pinnedPressActive) return
-        taskBackend.cancelHighlightWindows()
-        previewAnchor = anchor
-        previewRow = row
+    function previewItemsForRow(row) {
         const parentIndex = tasksModel.makeModelIndex(row)
         const grouped = tasksModel.data(parentIndex, TaskManager.AbstractTasksModel.IsGroupParent)
         const count = grouped ? tasksModel.rowCount(parentIndex) : 1
@@ -419,24 +439,165 @@ PlasmoidItem {
             const idx = grouped ? tasksModel.makeModelIndex(row, i) : parentIndex
             const ids = tasksModel.data(idx, TaskManager.AbstractTasksModel.WinIdList) || []
             const minimized = Boolean(tasksModel.data(idx, TaskManager.AbstractTasksModel.IsMinimized))
+            const winId = ids.length ? ids[0] : undefined
+            if (winId !== undefined && previewClosingIds.includes(String(winId))) continue
             entries.push({
                 row: row, child: grouped ? i : -1,
                 title: String(tasksModel.data(idx, Qt.DisplayRole) || "Finestra"),
                 icon: tasksModel.data(idx, Qt.DecorationRole),
-                winId: ids.length ? ids[0] : undefined,
+                winId: winId,
                 minimized: minimized
             })
         }
-        previewEntries = entries
-        previewDialog.visible = entries.length > 0
-        previewGrid.currentIndex = 0
-        previewLoadTimer.restart()
+        return entries
+    }
+
+    function previewRowForSource() {
+        if (previewSourceUrl === "" && previewRow >= 0 && previewRow < tasksModel.count)
+            return previewRow
+        for (let i = 0; i < tasksModel.count; ++i) {
+            const idx = tasksModel.makeModelIndex(i)
+            if ((tasksModel.data(idx, TaskManager.AbstractTasksModel.IsWindow)
+                || tasksModel.data(idx, TaskManager.AbstractTasksModel.IsGroupParent))
+                && String(tasksModel.data(idx, TaskManager.AbstractTasksModel.LauncherUrlWithoutIcon) || "")
+                    === previewSourceUrl) return i
+        }
+        return -1
+    }
+
+    function refreshPreview() {
+        if (!previewDialog.visible || previewSnapshotActive) return
+        const row = previewRowForSource()
+        if (row < 0) {
+            dismissPreview()
+            return
+        }
+        const entries = previewItemsForRow(row)
+        if (entries.length === 0) {
+            // Closing a window is asynchronous; keep the remaining cards until the model settles.
+            if (previewClosingIds.length === 0) dismissPreview()
+            return
+        }
+        previewRow = row
+        previewClosingIds = previewClosingIds.filter(id => {
+            const parentIndex = tasksModel.makeModelIndex(row)
+            const grouped = tasksModel.data(parentIndex, TaskManager.AbstractTasksModel.IsGroupParent)
+            const count = grouped ? tasksModel.rowCount(parentIndex) : 1
+            for (let i = 0; i < count; ++i) {
+                const idx = grouped ? tasksModel.makeModelIndex(row, i) : parentIndex
+                const ids = tasksModel.data(idx, TaskManager.AbstractTasksModel.WinIdList) || []
+                if (ids.length && String(ids[0]) === id) return true
+            }
+            return false
+        })
+        const changed = entries.length !== previewEntries.length
+            || entries.some((entry, i) => String(entry.winId) !== String(previewEntries[i].winId)
+                || entry.title !== previewEntries[i].title
+                || entry.minimized !== previewEntries[i].minimized)
+        if (changed) previewEntries = entries
+    }
+
+    function commitPendingPreview() {
+        previewAnchor = pendingPreviewAnchor
+        previewRow = pendingPreviewRow
+        previewSourceUrl = String(tasksModel.data(tasksModel.makeModelIndex(previewRow),
+            TaskManager.AbstractTasksModel.LauncherUrlWithoutIcon) || "")
+        previewClosingIds = []
+        previewReadyIndices = []
+        previewEntries = pendingPreviewEntries
+        previewGrid.contentY = 0
+    }
+
+    function notePreviewReady(index) {
+        if (!previewSnapshotActive || previewCaptureTimer.running
+            || previewReadyIndices.includes(index)) return
+        previewReadyIndices = previewReadyIndices.concat(index)
+        if (previewReadyIndices.length >= previewEntries.length) revealPreview()
+    }
+
+    function revealPreview() {
+        if (!previewSnapshotActive || previewReveal.running) return
+        previewWaitTimer.stop()
+        previewReveal.start()
+    }
+
+    function openPreview(anchor, row) {
+        if (!anchor || row < 0 || pinnedPressActive) return
+        if (previewDialog.visible && previewAnchor === anchor && previewRow === row
+            && (!previewSnapshotActive || pendingPreviewAnchor === anchor)) {
+            previewCloseTimer.stop()
+            return
+        }
+        taskBackend.cancelHighlightWindows()
+        previewClosingIds = []
+        const entries = previewItemsForRow(row)
+        if (entries.length === 0) return
         previewCloseTimer.stop()
+        previewRefreshTimer.stop()
+        pendingPreviewAnchor = anchor
+        pendingPreviewRow = row
+        pendingPreviewEntries = entries
+        const point = anchor.mapToItem(bar, 0, 0)
+        previewMotionAnchor.animatedX = point.x
+        if (previewDialog.visible) {
+            if (!previewSnapshotActive) {
+                previewSnapshot.frozenWidth = previewGrid.width
+                previewSnapshot.frozenHeight = previewGrid.height
+                previewSnapshot.opacity = 1
+                previewSnapshot.visible = true
+                previewSnapshotActive = true
+                previewSnapshot.scheduleUpdate()
+                previewCaptureTimer.restart()
+            } else if (!previewCaptureTimer.running) {
+                previewReveal.stop()
+                previewWaitTimer.stop()
+                previewSnapshotActive = true
+                previewSnapshot.visible = true
+                previewSnapshot.opacity = 1
+                previewGrid.opacity = 0
+                previewWaitTimer.restart()
+                commitPendingPreview()
+            }
+            return
+        }
+        commitPendingPreview()
+        previewGrid.opacity = 1
+        previewDialog.visible = true
+        previewLoadTimer.restart()
+    }
+
+    function previewIndexForEntry(entry) {
+        const row = previewRowForSource()
+        if (row < 0) return null
+        const parentIndex = tasksModel.makeModelIndex(row)
+        const grouped = tasksModel.data(parentIndex, TaskManager.AbstractTasksModel.IsGroupParent)
+        if (!grouped) return parentIndex
+        for (let i = 0; i < tasksModel.rowCount(parentIndex); ++i) {
+            const idx = tasksModel.makeModelIndex(row, i)
+            const ids = tasksModel.data(idx, TaskManager.AbstractTasksModel.WinIdList) || []
+            if (ids.length && String(ids[0]) === String(entry.winId)) return idx
+        }
+        if (entry.winId === undefined && entry.child >= 0
+            && entry.child < tasksModel.rowCount(parentIndex))
+            return tasksModel.makeModelIndex(row, entry.child)
+        return null
+    }
+
+    function closePreviewEntry(entry) {
+        const targetIndex = previewIndexForEntry(entry)
+        if (!targetIndex) return
+        if (entry.winId !== undefined)
+            previewClosingIds = previewClosingIds.concat(String(entry.winId))
+        tasksModel.requestClose(targetIndex)
+        previewEntries = previewEntries.filter(item => item !== entry
+            && (entry.winId === undefined || String(item.winId) !== String(entry.winId)))
+        if (previewEntries.length === 0) dismissPreview()
+        else previewCloseTimer.stop()
     }
 
     function activatePreviewEntry(entry) {
-        const idx = entry.child >= 0 ? tasksModel.makeModelIndex(entry.row, entry.child)
-            : tasksModel.makeModelIndex(entry.row)
+        const idx = previewIndexForEntry(entry)
+        if (!idx) return
         publishIconGeometries()
         tasksModel.requestActivate(idx)
         taskBackend.cancelHighlightWindows()
@@ -870,20 +1031,81 @@ PlasmoidItem {
         onTriggered: bar.previewReady = true
     }
     Timer {
+        id: previewRefreshTimer
+        interval: 70
+        onTriggered: bar.refreshPreview()
+    }
+    Timer {
+        id: previewCaptureTimer
+        interval: 34
+        onTriggered: {
+            previewGrid.opacity = 0
+            previewWaitTimer.restart()
+            bar.commitPendingPreview()
+        }
+    }
+    Timer {
+        id: previewWaitTimer
+        interval: 550
+        onTriggered: bar.revealPreview()
+    }
+    Timer {
         id: previewCloseTimer
         interval: 350
         onTriggered: previewDialog.visible = false
+    }
+
+    Item {
+        id: previewMotionAnchor
+        property real animatedX: 0
+        x: Math.round(animatedX)
+        width: bar.iconSlot
+        height: bar.height
+        Behavior on animatedX {
+            enabled: previewDialog.visible
+            NumberAnimation { duration: 280; easing.type: Easing.OutCubic }
+        }
+    }
+
+    ParallelAnimation {
+        id: previewReveal
+        NumberAnimation {
+            target: previewGrid
+            property: "opacity"
+            to: 1
+            duration: 210
+            easing.type: Easing.OutCubic
+        }
+        NumberAnimation {
+            target: previewSnapshot
+            property: "opacity"
+            to: 0
+            duration: 210
+            easing.type: Easing.OutCubic
+        }
+        onStopped: {
+            if (previewGrid.opacity < 0.99) return
+            bar.previewSnapshotActive = false
+            previewSnapshot.visible = false
+            if (previewDialog.visible) previewRefreshTimer.restart()
+        }
     }
 
     PlasmaCore.Dialog {
         id: previewDialog
         type: PlasmaCore.Dialog.PopupMenu
         flags: Qt.WindowStaysOnTopHint
-        hideOnWindowDeactivate: true
+        hideOnWindowDeactivate: false
         location: Plasmoid.location
-        visualParent: bar.previewAnchor
+        visualParent: previewMotionAnchor
         onVisibleChanged: {
             if (!visible) {
+                previewCaptureTimer.stop()
+                previewWaitTimer.stop()
+                previewReveal.stop()
+                bar.previewSnapshotActive = false
+                previewSnapshot.visible = false
+                previewGrid.opacity = 1
                 previewLoadTimer.stop()
                 bar.previewReady = false
                 taskBackend.cancelHighlightWindows()
@@ -891,9 +1113,19 @@ PlasmoidItem {
         }
 
         mainItem: Item {
-            width: Math.min(Screen.width * 0.8, Math.max(196, Math.min(4, bar.previewEntries.length) * 182 + 14))
+            width: bar.previewColumns * bar.previewCellWidth + 2 * bar.previewInset
             height: Math.min(Screen.height * 0.55,
-                Math.ceil(bar.previewEntries.length / Math.max(1, Math.floor(width / 182))) * 155 + 14)
+                Math.ceil(bar.previewEntries.length / bar.previewColumns)
+                    * bar.previewCellHeight + 2 * bar.previewInset)
+            clip: true
+            Behavior on width {
+                enabled: previewDialog.visible
+                NumberAnimation { duration: 270; easing.type: Easing.OutCubic }
+            }
+            Behavior on height {
+                enabled: previewDialog.visible
+                NumberAnimation { duration: 270; easing.type: Easing.OutCubic }
+            }
             Keys.onEscapePressed: previewDialog.visible = false
 
             HoverHandler {
@@ -905,11 +1137,13 @@ PlasmoidItem {
 
             GridView {
                 id: previewGrid
-                anchors.fill: parent
-                anchors.margins: 7
+                x: bar.previewInset
+                y: bar.previewInset
+                width: bar.previewColumns * cellWidth
+                height: parent.height - 2 * bar.previewInset
                 clip: true
-                cellWidth: 182
-                cellHeight: 155
+                cellWidth: bar.previewCellWidth
+                cellHeight: bar.previewCellHeight
                 cacheBuffer: 0
                 model: bar.previewEntries
 
@@ -921,8 +1155,8 @@ PlasmoidItem {
                     height: previewGrid.cellHeight
 
                     HoverHandler {
+                        id: cardHover
                         onHoveredChanged: {
-                            if (hovered) previewGrid.currentIndex = index
                             if (modelData.winId !== undefined)
                                 taskBackend.windowsHovered([modelData.winId], hovered)
                         }
@@ -930,60 +1164,111 @@ PlasmoidItem {
 
                     Rectangle {
                         anchors.fill: parent
-                        anchors.margins: 3
-                        radius: 9
+                        anchors.margins: 1
+                        radius: 5
                         color: Kirigami.Theme.backgroundColor
-                        opacity: 0.72
-                        border.width: 1
-                        border.color: Kirigami.Theme.highlightColor
+                        opacity: cardHover.hovered ? 0.3 : 0
+                        Behavior on opacity { NumberAnimation { duration: 150 } }
                     }
                     WindowPreview {
+                        id: thumbnail
                         anchors.left: parent.left
                         anchors.right: parent.right
                         anchors.top: titleLabel.bottom
                         anchors.bottom: parent.bottom
-                        anchors.margins: 9
+                        anchors.margins: 4
+                        anchors.topMargin: 2
                         windowId: modelData.winId
                         icon: modelData.icon
                         minimized: modelData.minimized
                         active: bar.previewReady && previewDialog.visible
                             && previewCard.y + previewCard.height > previewGrid.contentY
                             && previewCard.y < previewGrid.contentY + previewGrid.height
+                        onThumbnailReadyChanged: if (thumbnailReady) bar.notePreviewReady(index)
+                        Component.onCompleted: if (thumbnailReady) bar.notePreviewReady(index)
                     }
                     PlasmaComponents3.Label {
                         id: titleLabel
-                        anchors.left: parent.left
+                        anchors.left: titleIcon.right
+                        anchors.leftMargin: 5
                         anchors.right: closeButton.left
+                        anchors.rightMargin: 4
                         anchors.top: parent.top
-                        anchors.margins: 9
+                        anchors.topMargin: 4
                         height: 20
                         text: modelData.title
                         elide: Text.ElideRight
+                    }
+                    Kirigami.Icon {
+                        id: titleIcon
+                        anchors.left: parent.left
+                        anchors.leftMargin: 6
+                        anchors.verticalCenter: titleLabel.verticalCenter
+                        width: 16
+                        height: 16
+                        source: modelData.icon
                     }
                     MouseArea {
                         anchors.fill: parent
                         anchors.rightMargin: 27
                         onClicked: bar.activatePreviewEntry(modelData)
                     }
-                    Kirigami.Icon {
+                    Item {
                         id: closeButton
                         anchors.right: parent.right
-                        anchors.rightMargin: 8
+                        anchors.rightMargin: 6
                         anchors.verticalCenter: titleLabel.verticalCenter
-                        width: 16
-                        height: 16
-                        source: "window-close"
-                        MouseArea {
+                        width: 20
+                        height: 20
+                        Rectangle {
                             anchors.fill: parent
-                            onClicked: {
-                                const ix = modelData.child >= 0
-                                    ? tasksModel.makeModelIndex(modelData.row, modelData.child)
-                                    : tasksModel.makeModelIndex(modelData.row)
-                                tasksModel.requestClose(ix)
-                                previewDialog.visible = false
-                            }
+                            radius: 5
+                            color: Kirigami.Theme.textColor
+                            opacity: closeMouse.containsMouse ? 0.16 : 0
+                            Behavior on opacity { NumberAnimation { duration: 140 } }
+                        }
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: 11
+                            height: 1
+                            rotation: 45
+                            color: Kirigami.Theme.textColor
+                        }
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: 11
+                            height: 1
+                            rotation: -45
+                            color: Kirigami.Theme.textColor
+                        }
+                        MouseArea {
+                            id: closeMouse
+                            anchors.fill: parent
+                            hoverEnabled: true
+                            onClicked: bar.closePreviewEntry(modelData)
                         }
                     }
+                }
+            }
+            ShaderEffectSource {
+                id: previewSnapshot
+                property real frozenWidth: 0
+                property real frozenHeight: 0
+                x: previewGrid.x
+                y: previewGrid.y
+                width: frozenWidth
+                height: frozenHeight
+                sourceItem: previewGrid
+                sourceRect: Qt.rect(0, 0, frozenWidth, frozenHeight)
+                live: false
+                visible: false
+                z: 10
+                MouseArea {
+                    anchors.fill: parent
+                    hoverEnabled: true
+                    onEntered: previewCloseTimer.stop()
+                    onExited: previewCloseTimer.restart()
+                    onClicked: mouse => mouse.accepted = true
                 }
             }
         }

@@ -59,8 +59,10 @@ Item {
         width: Math.min(button.extent - 2, button.height - 4)
         height: width
         radius: 4
-        color: pointer.containsMouse || button.active ? Kirigami.Theme.highlightColor : "transparent"
-        opacity: button.draggingPinned ? 0.36 : (button.active ? 0.24 : 0.14)
+        color: Kirigami.Theme.highlightColor
+        opacity: button.draggingPinned ? 0.36
+            : (button.active ? 0.24 : (pointer.containsMouse ? 0.14 : 0))
+        Behavior on opacity { NumberAnimation { duration: 120; easing.type: Easing.OutCubic } }
         scale: button.draggingPinned ? 1.12 : 1
         Behavior on scale { NumberAnimation { duration: 100 } }
     }
@@ -233,7 +235,8 @@ Item {
 
     Timer {
         id: hoverPreviewTimer
-        interval: button.taskbar.plasmoid.configuration.previewDelay
+        interval: button.taskbar.previewDialogVisible ? 65
+            : button.taskbar.plasmoid.configuration.previewDelay
         onTriggered: if (!button.pinDragPending && !button.draggingPinned)
             button.taskbar.openPreview(button, button.runningIndex)
     }

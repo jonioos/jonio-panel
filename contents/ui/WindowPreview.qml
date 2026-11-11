@@ -8,6 +8,9 @@ Item {
     required property var icon
     required property bool minimized
     required property bool active
+    readonly property bool thumbnailReady: minimized
+        || (x11Loader.active && x11Loader.status === Loader.Ready)
+        || (waylandLoader.active && waylandLoader.item && waylandLoader.item.ready)
 
     clip: true
 
@@ -19,6 +22,7 @@ Item {
     }
 
     Loader {
+        id: x11Loader
         anchors.fill: parent
         active: preview.active && !preview.minimized && Number.isInteger(preview.windowId)
         asynchronous: true
@@ -26,6 +30,7 @@ Item {
     }
 
     Loader {
+        id: waylandLoader
         anchors.fill: parent
         active: preview.active && preview.windowId !== undefined
             && !Number.isInteger(preview.windowId)
