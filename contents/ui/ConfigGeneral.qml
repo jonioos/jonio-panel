@@ -19,6 +19,8 @@ KCMUtils.SimpleKCM {
     property var cfg_pinnedSlotsDefault
     property alias cfg_stackCount: stackCount.value
     property var cfg_stackCountDefault
+    property alias cfg_showStackCounter: showStackCounter.checked
+    property var cfg_showStackCounterDefault
     property var cfg_stackAssignments
     property var cfg_stackAssignmentsDefault
     property alias cfg_indicatorStyle: indicatorStyle.currentIndex
@@ -86,6 +88,12 @@ KCMUtils.SimpleKCM {
             from: 1
             to: 8
             editable: true
+        }
+        QQC2.CheckBox {
+            id: showStackCounter
+            Kirigami.FormData.label: "Contatore stack:"
+            text: "Mostra il numero dello stack sulla freccia"
+            enabled: stackCount.value > 1
         }
         QQC2.Label {
             Layout.fillWidth: true

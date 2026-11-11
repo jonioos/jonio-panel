@@ -736,7 +736,8 @@ PlasmoidItem {
                 rotation: appDialog.visible ? 180 : 0
             }
             PlasmaComponents3.Label {
-                visible: Plasmoid.configuration.stackCount > 2
+                visible: Plasmoid.configuration.stackCount > 1
+                    && Plasmoid.configuration.showStackCounter
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.bottom: parent.bottom
                 anchors.bottomMargin: 1
