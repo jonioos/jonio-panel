@@ -537,8 +537,7 @@ PlasmoidItem {
         pendingPreviewAnchor = anchor
         pendingPreviewRow = row
         pendingPreviewEntries = entries
-        const point = anchor.mapToItem(bar, 0, 0)
-        previewMotionAnchor.animatedX = point.x
+        previewAnchor = anchor
         if (previewDialog.visible) {
             if (!previewSnapshotActive) {
                 previewSnapshot.frozenWidth = previewGrid.width
@@ -1055,18 +1054,6 @@ PlasmoidItem {
         onTriggered: previewDialog.visible = false
     }
 
-    Item {
-        id: previewMotionAnchor
-        property real animatedX: 0
-        x: Math.round(animatedX)
-        width: bar.iconSlot
-        height: bar.height
-        Behavior on animatedX {
-            enabled: previewDialog.visible
-            NumberAnimation { duration: 280; easing.type: Easing.OutCubic }
-        }
-    }
-
     ParallelAnimation {
         id: previewReveal
         NumberAnimation {
@@ -1097,7 +1084,11 @@ PlasmoidItem {
         flags: Qt.WindowStaysOnTopHint
         hideOnWindowDeactivate: false
         location: Plasmoid.location
-        visualParent: previewMotionAnchor
+        visualParent: bar.previewAnchor
+        Behavior on x {
+            enabled: previewDialog.visible
+            NumberAnimation { duration: 280; easing.type: Easing.OutCubic }
+        }
         onVisibleChanged: {
             if (!visible) {
                 previewCaptureTimer.stop()
