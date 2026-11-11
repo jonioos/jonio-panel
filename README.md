@@ -1,8 +1,46 @@
-# Jonio Taskbar per KDE Plasma 6
+<div align="center">
+  <img src="./assets/jonio-panel.svg" alt="Logo di Jonio Panel: una barra blu con applicazioni fissate e un separatore" width="144" height="144">
 
-Plasmoide QML ispirato alla barra di jonioOS Sila. Per impostazione predefinita usa lo spazio libero del pannello: le app fissate rimangono a sinistra del separatore, quelle aperte occupano la parte centrale e gli altri widget del pannello possono restare a destra. La freccia apre una griglia ricercabile di tutte le applicazioni.
+  # Jonio Panel
+
+  **La barra delle applicazioni ispirata a jonioOS Sila, realizzata per KDE Plasma 6.**
+
+  App fissate organizzate in stack, finestre aperte, anteprime e menu applicazioni in un solo plasmoide QML.
+
+  [![KDE Plasma 6](https://img.shields.io/badge/KDE%20Plasma-6-1d99f3?style=for-the-badge&logo=kde&logoColor=white)](https://kde.org/plasma-desktop/)
+  ![QML](https://img.shields.io/badge/QML-Qt%206-2cde85?style=for-the-badge&logo=qt&logoColor=white)
+  [![GPL-2.0-or-later](https://img.shields.io/badge/licenza-GPL--2.0--or--later-5965a6?style=for-the-badge)](./LICENSE)
+
+  [Anteprima](#anteprima) · [Installazione](#installazione) · [Come si usa](#come-si-usa) · [Impostazioni](#impostazioni)
+</div>
+
+---
+
+## Anteprima
+
+[![Jonio Panel su due schermi KDE Plasma, acquisizione nativa 3840 × 1080](./assets/jonio-panel-desktop-3840x1080.png)](./assets/jonio-panel-desktop-3840x1080.png)
+
+*Screenshot reale della barra su due monitor, acquisito a 3840 × 1080. Apri l'immagine per vederla alla risoluzione originale. Sfondo, tema e disposizione degli altri widget dipendono dalla configurazione di Plasma.*
+
+## Perché Jonio Panel
+
+Jonio Panel riunisce le app che usi ogni giorno a sinistra del separatore e le finestre aperte a destra. Può occupare lo spazio libero del pannello oppure restare compatto, lasciando gli altri widget all'estremità destra. La piccola freccia apre una griglia di applicazioni con ricerca.
+
+| Funzione | Cosa offre |
+| --- | --- |
+| **Stack di app fissate** | Da 1 a 8 gruppi; la rotellina passa da uno all'altro con un'animazione. Con un solo stack, scorre le icone. |
+| **Ordine personale** | Trascina le app fissate per riordinarle. La disposizione viene salvata nel widget. |
+| **Finestre e anteprime** | Le app aperte mostrano indicatori e miniature; puoi attivare, ripristinare o chiudere una finestra dall'anteprima. |
+| **Menu applicazioni** | Una griglia ricercabile permette di avviare un'app o fissarla nello stack corrente. |
+| **Azioni rapide** | Il menu contestuale espone le azioni supportate dall'app, come percorsi di Dolphin o controlli multimediali. |
+| **Più monitor** | Puoi mostrare tutte le finestre insieme oppure aggiungere un'istanza del widget a ogni pannello e filtrarla per monitor. |
+
+> [!TIP]
+> Gli stack organizzano le **app fissate**. Le finestre aperte continuano a comparire nella sezione dopo il separatore.
 
 ## Installazione
+
+**Requisito:** KDE Plasma 6 con `kpackagetool6` disponibile nel sistema.
 
 ```bash
 git clone https://github.com/jonioos/jonio-panel.git
@@ -10,25 +48,80 @@ cd jonio-panel
 kpackagetool6 --type Plasma/Applet --install .
 ```
 
-Poi aprire la modalità di modifica di Plasma e inserire **Barra delle applicazioni Jonio** nel pannello, prima degli altri widget da tenere a destra. Nelle impostazioni si può disattivare **Estendi in tutto lo spazio libero del pannello** per tornare alla larghezza compatta.
+Apri **Modifica pannello** in Plasma, scegli **Aggiungi o gestisci oggetti** e inserisci **Barra delle applicazioni Jonio**. Posizionala prima degli oggetti che vuoi lasciare a destra.
 
-Per aggiornare dopo modifiche:
+Per aggiornare una copia già installata dalla cartella del progetto:
 
 ```bash
 kpackagetool6 --type Plasma/Applet --upgrade .
 ```
 
-## Uso
+<details>
+<summary><strong>Il widget non compare subito nell'elenco?</strong></summary>
 
-- Clic sulla freccia piccola: apre la griglia delle applicazioni. La ricerca filtra i nomi; il piccolo pulsante su ogni voce la fissa nello stack corrente, la sposta lì oppure la rimuove se è già in quello stack.
-- Rotella sulla sezione a sinistra del separatore: passa con un'animazione allo stack precedente o successivo. Con un solo stack, scorre le icone orizzontalmente. Il numero di app per stack e il numero di stack si regolano nelle impostazioni.
-- Trascinamento col tasto sinistro delle app fissate: riordina le icone nello stack attualmente visibile e salva la nuova posizione.
-- Clic sinistro su un'icona: avvia o attiva l'app. Se ci sono più finestre, apre la griglia delle anteprime; il clic su un'anteprima attiva la finestra.
-- Passaggio del mouse su un'app aperta: apre le anteprime dopo una breve attesa. Passando sopra una miniatura, il backend di Plasma evidenzia sul desktop la finestra corrispondente. Un clic attiva o ripristina la finestra. Le miniature visibili vengono caricate insieme e rilasciate alla chiusura del popup.
-- Clic destro su un'icona: nuova finestra, percorsi e azioni rapide disponibili per l'app, riproduzione/pausa quando supportata, fissaggio e chiusura.
-- Clic centrale su un'app aperta: chiude la finestra o il gruppo.
-- Clic destro sullo spazio vuoto del widget: apre il menu standard di Plasma con **Configura Barra delle applicazioni Jonio**.
+Riapri l'elenco degli oggetti di Plasma. Se necessario, termina la sessione e accedi di nuovo, oppure riavvia la shell con `systemctl --user restart plasma-plasmashell.service`.
 
-Nelle impostazioni si regolano dimensione icone, spazio tra icone, app per stack, numero di stack, forma degli indicatori, colore personalizzato dei pallini e ritardo prima delle anteprime. L'interruttore **Chiudi il menu passando sopra un'icona della barra** è attivo per impostazione predefinita: disattivandolo, il menu resta aperto e l'anteprima attende la sua chiusura. Si regolano inoltre anteprime e ambito di monitor, desktop virtuali e attività. Per avere barre separate sui monitor, aggiungere il widget su ciascun pannello e scegliere **Solo il monitor di questa barra**.
+</details>
 
-Le icone iniziali sono Dolphin, Impostazioni di sistema e Kate; si possono rimuovere dal menu contestuale. L'ordine delle app fissate viene mantenuto nella configurazione del widget.
+## Come si usa
+
+| Gesto | Risultato |
+| --- | --- |
+| **Clic sulla freccia** | Apre o chiude il menu con tutte le applicazioni. |
+| **Digita nel campo di ricerca** | Filtra le applicazioni per nome. |
+| **Clic sul `+` di un'app** | La fissa nello stack visibile; se è già fissata altrove, la sposta nello stack corrente. |
+| **Rotellina sulle app fissate** | Cambia stack; con un solo stack, scorre le icone in orizzontale. |
+| **Trascina un'app fissata** | Cambia la sua posizione nello stack. |
+| **Clic sinistro su un'app** | La avvia, attiva o mostra le finestre del gruppo. |
+| **Passa il mouse su un'app aperta** | Mostra le anteprime dopo il ritardo configurato. |
+| **Clic su una miniatura / sulla sua X** | Attiva o chiude quella finestra. |
+| **Clic centrale su un'app aperta** | Chiude la finestra o il gruppo. |
+| **Clic destro su un'icona** | Apre le azioni disponibili per quell'app. |
+| **Clic destro nello spazio vuoto** | Apre il menu di Plasma per configurare il widget. |
+
+Le anteprime mostrano le finestre raggruppate e seguono l'icona sotto il mouse. Sul desktop, il passaggio sopra una miniatura evidenzia la finestra corrispondente. Durante il cambio di app, la vecchia anteprima resta visibile brevemente mentre viene preparata la nuova.
+
+## Impostazioni
+
+Apri **Configura Barra delle applicazioni Jonio** dal menu contestuale nello spazio vuoto del widget.
+
+<details open>
+<summary><strong>Aspetto e organizzazione</strong></summary>
+
+- **Larghezza:** estendi il widget nello spazio libero del pannello o usa la larghezza compatta.
+- **Icone:** regola dimensione e spazio tra gli elementi.
+- **Stack:** scegli da 4 a 12 posizioni visibili e da 1 a 8 stack.
+- **Indicatori:** barretta, pallino o un pallino per ogni finestra, con colore del tema o personalizzato.
+- **Finestre:** scegli se raggruppare quelle della stessa applicazione.
+
+</details>
+
+<details>
+<summary><strong>Anteprime e menu</strong></summary>
+
+- Attiva o disattiva le anteprime al passaggio del mouse.
+- Regola il ritardo prima dell'apertura da 100 a 2000 ms.
+- Scegli se il menu applicazioni si chiude quando passi sopra un'icona della barra.
+
+</details>
+
+<details>
+<summary><strong>Monitor, desktop e attività</strong></summary>
+
+Per ciascuna categoria puoi mostrare tutte le finestre insieme o limitarti al monitor, desktop virtuale o attività correnti. Per barre indipendenti su più monitor, aggiungi Jonio Panel a ogni pannello e seleziona **Solo il monitor di questa barra** in ciascuna istanza.
+
+</details>
+
+## Note tecniche
+
+Jonio Panel è un plasmoide QML per Plasma 6. Usa il modello dei processi di Plasma per app fissate e finestre, le miniature di Plasma su X11 e PipeWire su Wayland. Le anteprime vengono attivate quando servono e rilasciate alla chiusura del popup.
+
+I file principali sono in [`contents/ui`](./contents/ui), le opzioni persistenti in [`contents/config/main.xml`](./contents/config/main.xml) e i metadati in [`metadata.json`](./metadata.json).
+
+## Contribuire
+
+Segnalazioni di bug e proposte di miglioramento sono benvenute nelle [issue del progetto](https://github.com/jonioos/jonio-panel/issues). Per una modifica al codice, descrivi il comportamento atteso e quello osservato, indica la versione di Plasma e specifica se usi Wayland o X11.
+
+## Licenza
+
+Distribuito secondo la [GNU GPL versione 2 o successiva](./LICENSE).

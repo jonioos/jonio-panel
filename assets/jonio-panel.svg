@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1254 1254" width="1254" height="1254" role="img" aria-label="Jonio Panel — dock logo">
+  <title>Jonio Panel</title>
+  <desc>Minimalist blue app icon showing a five-app dock with a separator before the final app.</desc>
+  <defs>
+    <path id="icon-shape" d="M342 61H907C1064 61 1191 188 1191 345V909C1191 1066 1064 1193 907 1193H342C185 1193 59 1066 59 909V345C59 188 185 61 342 61Z"/>
+    <clipPath id="icon-clip"><use href="#icon-shape"/></clipPath>
+  </defs>
+  <g clip-path="url(#icon-clip)">
+    <rect x="59" y="61" width="1132" height="1132" fill="#003DA7"/>
+    <!-- Jonio's signature diagonal bands, using flat vector fills. -->
+    <path d="M981 61H1191V1193H59V855Z" fill="#0060D1"/>
+    <path d="M1191 343V1193H219Z" fill="#078AF3"/>
+    <path d="M1191 854V1193H792Z" fill="#1BA5FD"/>
+  </g>
+  <!-- Dock applications: simple filled shapes, no strokes or effects. -->
+  <g fill="#FFFFFF">
+    <rect x="170" y="531" width="159" height="167" rx="47"/>
+    <rect x="352" y="531" width="159" height="167" rx="47"/>
+    <rect x="532" y="531" width="159" height="167" rx="47"/>
+    <rect x="711" y="531" width="158" height="167" rx="47"/>
+    <rect x="893" y="531" width="16" height="168" rx="8"/>
+    <rect x="932" y="531" width="157" height="167" rx="47"/>
+    <path d="M183 730H1070C1081 730 1090 739 1090 751C1090 788 1061 818 1025 818H228C192 818 163 788 163 751C163 739 172 730 183 730Z"/>
+  </g>
+</svg>
