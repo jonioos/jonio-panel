@@ -18,9 +18,24 @@
 
 ## Anteprima
 
+### Due stack, una rotellina
+
+<div align="center">
+  <strong>Stack 1 · app di ogni giorno</strong><br><br>
+  <img src="./assets/jonio-panel-stack-1.png" alt="Primo stack della barra con Dolphin, browser, editor e altre app fissate" width="523"><br><br>
+  <strong>↕ Scorri con la rotellina sulle app fissate ↕</strong><br><br>
+  <img src="./assets/jonio-panel-stack-2.png" alt="Secondo stack della stessa barra con un altro insieme di applicazioni fissate" width="523"><br><br>
+  <strong>Stack 2 · altre app, stessa barra</strong>
+</div>
+
+<details>
+<summary><strong>Apri lo screenshot completo dei due monitor · 3840 × 1080</strong></summary>
+
 [![Jonio Panel su due schermi KDE Plasma, acquisizione nativa 3840 × 1080](./assets/jonio-panel-desktop-3840x1080.png)](./assets/jonio-panel-desktop-3840x1080.png)
 
-*Screenshot reale della barra su due monitor, acquisito a 3840 × 1080. Apri l'immagine per vederla alla risoluzione originale. Sfondo, tema e disposizione degli altri widget dipendono dalla configurazione di Plasma.*
+*Acquisizione reale alla risoluzione originale. Sfondo, tema e disposizione degli altri widget dipendono dalla configurazione di Plasma.*
+
+</details>
 
 ## Perché Jonio Panel
 
