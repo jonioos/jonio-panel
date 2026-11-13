@@ -3,7 +3,7 @@ import org.kde.plasma.configuration
 
 ConfigModel {
     ConfigCategory {
-        name: "Jonio Taskbar"
+        name: "Jonio Panel"
         icon: "preferences-desktop-color"
         source: "ConfigGeneral.qml"
     }

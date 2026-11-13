@@ -63,7 +63,7 @@ cd jonio-panel
 kpackagetool6 --type Plasma/Applet --install .
 ```
 
-Apri **Modifica pannello** in Plasma, scegli **Aggiungi o gestisci oggetti** e inserisci **Barra delle applicazioni Jonio**. Posizionala prima degli oggetti che vuoi lasciare a destra.
+Apri **Modifica pannello** in Plasma, scegli **Aggiungi o gestisci oggetti** e inserisci **Jonio Panel**. Posizionala prima degli oggetti che vuoi lasciare a destra.
 
 Per aggiornare una copia già installata dalla cartella del progetto:
 
@@ -98,7 +98,7 @@ Le anteprime mostrano le finestre raggruppate e seguono l'icona sotto il mouse. 
 
 ## Impostazioni
 
-Apri **Configura Barra delle applicazioni Jonio** dal menu contestuale nello spazio vuoto del widget.
+Apri **Configura Jonio Panel** dal menu contestuale nello spazio vuoto del widget.
 
 <details open>
 <summary><strong>Aspetto e organizzazione</strong></summary>
